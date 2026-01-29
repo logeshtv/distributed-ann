@@ -5,11 +5,11 @@ WORKDIR /app
 
 # Accept build arguments
 ARG VITE_SOCKET_URL=http://localhost:3001
-ARG VITE_SERVER_URL=http://localhost:3001
+ARG VITE_API_URL=http://localhost:3001/api
 
 # Set environment variables for Vite
 ENV VITE_SOCKET_URL=$VITE_SOCKET_URL
-ENV VITE_SERVER_URL=$VITE_SERVER_URL
+ENV VITE_API_URL=$VITE_API_URL
 
 # Install dependencies
 COPY package*.json ./
