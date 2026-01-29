@@ -24,6 +24,28 @@ export class SocketHandler {
         this.io.on('connection', (socket) => {
             this.logger.info(`New connection attempt: ${socket.id}`);
 
+            // ==================== Dashboard Connection ====================
+            socket.on('dashboard:connect', () => {
+                socket.join('dashboard');
+                this.logger.info(`Dashboard connected: ${socket.id}`);
+                
+                // Send initial state
+                const devices = this.deviceRegistry.getAllDevices().map(d => this.sanitizeDevice(d));
+                const metrics = this.metricsCollector.getLatestMetrics();
+                const history = this.metricsCollector.getMetricsHistory();
+                
+                socket.emit('dashboard:state', {
+                    devices,
+                    metrics,
+                    history,
+                    currentRound: this.weightAggregator.getCurrentRound()
+                });
+            });
+
+            socket.on('disconnect', () => {
+                this.logger.info(`Client disconnected: ${socket.id}`);
+            });
+
             // ==================== Device Registration ====================
             socket.on('device:register', (data) => {
                 try {

@@ -105,6 +105,15 @@ export class MetricsCollector {
         return this.trainingHistory;
     }
 
+    getLatestMetrics() {
+        if (this.trainingHistory.length === 0) return null;
+        return this.trainingHistory[this.trainingHistory.length - 1];
+    }
+
+    getMetricsHistory() {
+        return this.trainingHistory;
+    }
+
     getTrainingProgress() {
         if (this.trainingHistory.length === 0) return null;
 

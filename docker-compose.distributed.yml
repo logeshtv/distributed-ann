@@ -75,13 +75,16 @@ services:
     build:
       context: ./web_dashboard
       dockerfile: Dockerfile
+      args:
+        - VITE_SERVER_URL=http://localhost:3000/api
+        - VITE_WS_URL=ws://localhost:3000
     container_name: distributed-dashboard
     restart: unless-stopped
     ports:
       - "3000:80"
     environment:
-      - VITE_SERVER_URL=http://server:3001
-      - VITE_WS_URL=ws://server:3001
+      - VITE_SERVER_URL=http://localhost:3000/api
+      - VITE_WS_URL=ws://localhost:3000
     depends_on:
       server:
         condition: service_healthy
