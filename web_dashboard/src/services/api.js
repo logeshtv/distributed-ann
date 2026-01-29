@@ -78,6 +78,50 @@ class ApiService {
   async getWeights() {
     return this.request('/models/weights');
   }
+
+  // ==================== Datasets API ====================
+  
+  async getDatasets() {
+    return this.request('/datasets');
+  }
+
+  async getDataDownloadStatus() {
+    return this.request('/datasets/download/status');
+  }
+
+  async startDataDownload(config) {
+    return this.request('/datasets/download', {
+      method: 'POST',
+      body: JSON.stringify(config)
+    });
+  }
+
+  async deleteDataset(type, filename) {
+    return this.request(`/datasets/${type}/${encodeURIComponent(filename)}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // ==================== Models API ====================
+  
+  async getModels() {
+    return this.request('/models');
+  }
+
+  async downloadModel(filename) {
+    const url = `${API_URL}/models/${encodeURIComponent(filename)}/download`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Failed to download model');
+    }
+    return response.blob();
+  }
+
+  async deleteModel(filename) {
+    return this.request(`/models/${encodeURIComponent(filename)}`, {
+      method: 'DELETE'
+    });
+  }
 }
 
 export const apiService = new ApiService();

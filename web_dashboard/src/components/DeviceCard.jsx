@@ -98,38 +98,73 @@ function DeviceCard({ device, onRemove }) {
 
       {/* Resources */}
       <div className="grid grid-cols-2 gap-3">
-        {/* RAM */}
+        {/* RAM - Show Available */}
         <div className="bg-slate-800/30 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-2">
             <HardDrive className="w-4 h-4 text-violet-400" />
-            <span className="text-xs text-slate-400">RAM</span>
+            <span className="text-xs text-slate-400">RAM Available</span>
           </div>
           <div className="flex items-baseline gap-1">
-            <span className="text-lg font-bold text-white mono">{ramUsage}%</span>
-            <span className="text-xs text-slate-500">
-              / {(device.resources?.totalRam / 1024).toFixed(1)}GB
+            <span className="text-lg font-bold text-emerald-400 mono">
+              {((device.resources?.availableRam || 0) / 1024).toFixed(1)}GB
             </span>
+            <span className="text-xs text-slate-500">
+              / {((device.resources?.totalRam || 0) / 1024).toFixed(1)}GB
+            </span>
+          </div>
+          <div className="mt-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all"
+              style={{ width: `${100 - ramUsage}%` }}
+            />
           </div>
         </div>
 
-        {/* CPU */}
+        {/* CPU - Show Available */}
         <div className="bg-slate-800/30 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-2">
             <Cpu className="w-4 h-4 text-cyan-400" />
-            <span className="text-xs text-slate-400">CPU</span>
+            <span className="text-xs text-slate-400">CPU Available</span>
           </div>
           <div className="flex items-baseline gap-1">
-            <span className="text-lg font-bold text-white mono">
-              {(device.resources?.cpuUsage || 0).toFixed(0)}%
+            <span className="text-lg font-bold text-cyan-400 mono">
+              {(100 - (device.resources?.cpuUsage || 0)).toFixed(0)}%
             </span>
             <span className="text-xs text-slate-500">
-              {device.resources?.cpuCores} cores
+              ({device.resources?.availableCores || device.resources?.cpuCores || '?'} cores)
             </span>
+          </div>
+          <div className="mt-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-cyan-500 to-violet-500 rounded-full transition-all"
+              style={{ width: `${100 - (device.resources?.cpuUsage || 0)}%` }}
+            />
           </div>
         </div>
 
+        {/* GPU - if available */}
+        {device.resources?.gpuAvailable && (
+          <div className="bg-slate-800/30 rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Activity className="w-4 h-4 text-amber-400" />
+              <span className="text-xs text-slate-400">GPU Memory</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-lg font-bold text-amber-400 mono">
+                {((device.resources?.gpuMemoryAvailable || 0) / 1024).toFixed(1)}GB
+              </span>
+              <span className="text-xs text-slate-500">
+                / {((device.resources?.gpuMemoryTotal || 0) / 1024).toFixed(1)}GB
+              </span>
+            </div>
+            {device.resources?.gpuName && (
+              <p className="text-xs text-slate-500 mt-1 truncate">{device.resources.gpuName}</p>
+            )}
+          </div>
+        )}
+
         {/* Battery */}
-        {device.type === 'mobile' && (
+        {(device.type === 'mobile' || device.type === 'laptop') && (
           <div className="bg-slate-800/30 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-2">
               <Battery className={clsx(
@@ -143,7 +178,7 @@ function DeviceCard({ device, onRemove }) {
                 {device.resources?.batteryLevel || 0}%
               </span>
               {device.resources?.isCharging && (
-                <span className="text-xs text-emerald-400">⚡</span>
+                <span className="text-xs text-emerald-400">⚡ Charging</span>
               )}
             </div>
           </div>
@@ -152,7 +187,7 @@ function DeviceCard({ device, onRemove }) {
         {/* Stats */}
         <div className="bg-slate-800/30 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-2">
-            <Activity className="w-4 h-4 text-amber-400" />
+            <Activity className="w-4 h-4 text-violet-400" />
             <span className="text-xs text-slate-400">Rounds</span>
           </div>
           <div className="text-lg font-bold text-white mono">

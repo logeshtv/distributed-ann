@@ -8,14 +8,18 @@ import {
   ChevronLeft,
   Zap,
   Wifi,
-  WifiOff
+  WifiOff,
+  Database,
+  Box
 } from 'lucide-react';
 import clsx from 'clsx';
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/devices', icon: Cpu, label: 'Devices' },
+  { path: '/datasets', icon: Database, label: 'Datasets' },
   { path: '/training', icon: Activity, label: 'Training' },
+  { path: '/models', icon: Box, label: 'Models' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 

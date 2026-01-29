@@ -7,6 +7,8 @@ import Dashboard from './pages/Dashboard';
 import Devices from './pages/Devices';
 import Training from './pages/Training';
 import Settings from './pages/Settings';
+import Datasets from './pages/Datasets';
+import Models from './pages/Models';
 
 function App() {
   const { connected, devices, jobs, metrics, history, currentRound, refreshDevices, setJobs } = useSocket();
@@ -55,6 +57,10 @@ function App() {
                 } 
               />
               <Route 
+                path="/datasets" 
+                element={<Datasets />} 
+              />
+              <Route 
                 path="/training" 
                 element={
                   <Training 
@@ -65,6 +71,10 @@ function App() {
                     currentRound={currentRound}
                   />
                 } 
+              />
+              <Route 
+                path="/models" 
+                element={<Models />} 
               />
               <Route 
                 path="/settings" 

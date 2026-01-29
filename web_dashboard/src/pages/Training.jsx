@@ -299,14 +299,26 @@ function JobCard({ job, onStart, onStop, readyDevices }) {
 }
 
 function CreateJobModal({ onClose, onCreated, creating, setCreating }) {
+  // Production-grade default configuration for best model training
   const [formData, setFormData] = useState({
-    name: 'Training Job',
-    maxRounds: 100,
-    localEpochs: 3,
-    learningRate: 0.001,
-    batchSize: 32,
-    minDevices: 1
+    name: 'Production Training',
+    maxRounds: 500,           // More rounds for better convergence
+    localEpochs: 5,           // More local epochs per round
+    learningRate: 0.0001,     // Lower LR for stable training
+    batchSize: 128,           // Larger batch for better gradients
+    minDevices: 1,
+    patience: 50,             // Early stopping patience
+    warmupRounds: 10,         // Learning rate warmup
+    useScheduler: true,       // Use LR scheduler
+    schedulerType: 'cosine',  // Cosine annealing
+    weightDecay: 0.01,        // L2 regularization
+    gradientClip: 1.0,        // Gradient clipping
+    mixedPrecision: true,     // FP16 training for speed
+    saveEvery: 10,            // Save checkpoint every N rounds
+    aggregationMethod: 'fedavg' // Federated averaging
   });
+  
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -370,8 +382,9 @@ function CreateJobModal({ onClose, onCreated, creating, setCreating }) {
                 onChange={(e) => setFormData(prev => ({ ...prev, maxRounds: e.target.value }))}
                 className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white focus:outline-none focus:border-cyan-500/50"
                 min="1"
-                max="1000"
+                max="10000"
               />
+              <p className="text-xs text-slate-500 mt-1">Recommended: 500+ for best results</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Local Epochs</label>
@@ -381,8 +394,9 @@ function CreateJobModal({ onClose, onCreated, creating, setCreating }) {
                 onChange={(e) => setFormData(prev => ({ ...prev, localEpochs: e.target.value }))}
                 className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white focus:outline-none focus:border-cyan-500/50"
                 min="1"
-                max="10"
+                max="20"
               />
+              <p className="text-xs text-slate-500 mt-1">Epochs per device per round</p>
             </div>
           </div>
 
@@ -394,21 +408,25 @@ function CreateJobModal({ onClose, onCreated, creating, setCreating }) {
                 value={formData.learningRate}
                 onChange={(e) => setFormData(prev => ({ ...prev, learningRate: e.target.value }))}
                 className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white focus:outline-none focus:border-cyan-500/50"
-                step="0.0001"
-                min="0.00001"
-                max="1"
+                step="0.00001"
+                min="0.000001"
+                max="0.1"
               />
+              <p className="text-xs text-slate-500 mt-1">Recommended: 0.0001 for stability</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Batch Size</label>
-              <input
-                type="number"
+              <select
                 value={formData.batchSize}
-                onChange={(e) => setFormData(prev => ({ ...prev, batchSize: e.target.value }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, batchSize: parseInt(e.target.value) }))}
                 className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white focus:outline-none focus:border-cyan-500/50"
-                min="1"
-                max="256"
-              />
+              >
+                <option value={32}>32 (Low Memory)</option>
+                <option value={64}>64 (Balanced)</option>
+                <option value={128}>128 (Recommended)</option>
+                <option value={256}>256 (High Memory)</option>
+                <option value={512}>512 (GPU Required)</option>
+              </select>
             </div>
           </div>
 
@@ -423,6 +441,94 @@ function CreateJobModal({ onClose, onCreated, creating, setCreating }) {
               max="100"
             />
           </div>
+          
+          {/* Advanced Settings Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="text-cyan-400 text-sm hover:text-cyan-300 flex items-center gap-1"
+          >
+            {showAdvanced ? '▼' : '▶'} Advanced Settings
+          </button>
+          
+          {showAdvanced && (
+            <div className="space-y-4 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Early Stopping Patience</label>
+                  <input
+                    type="number"
+                    value={formData.patience}
+                    onChange={(e) => setFormData(prev => ({ ...prev, patience: parseInt(e.target.value) }))}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white focus:outline-none focus:border-cyan-500/50"
+                    min="5"
+                    max="200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Weight Decay</label>
+                  <input
+                    type="number"
+                    value={formData.weightDecay}
+                    onChange={(e) => setFormData(prev => ({ ...prev, weightDecay: parseFloat(e.target.value) }))}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white focus:outline-none focus:border-cyan-500/50"
+                    step="0.001"
+                    min="0"
+                    max="0.1"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">LR Scheduler</label>
+                  <select
+                    value={formData.schedulerType}
+                    onChange={(e) => setFormData(prev => ({ ...prev, schedulerType: e.target.value }))}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white focus:outline-none focus:border-cyan-500/50"
+                  >
+                    <option value="cosine">Cosine Annealing</option>
+                    <option value="step">Step Decay</option>
+                    <option value="plateau">Reduce on Plateau</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Gradient Clip</label>
+                  <input
+                    type="number"
+                    value={formData.gradientClip}
+                    onChange={(e) => setFormData(prev => ({ ...prev, gradientClip: parseFloat(e.target.value) }))}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white focus:outline-none focus:border-cyan-500/50"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={formData.mixedPrecision}
+                    onChange={(e) => setFormData(prev => ({ ...prev, mixedPrecision: e.target.checked }))}
+                    className="rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Mixed Precision (FP16)
+                </label>
+                <label className="flex items-center gap-2 text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={formData.useScheduler}
+                    onChange={(e) => setFormData(prev => ({ ...prev, useScheduler: e.target.checked }))}
+                    className="rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Use LR Scheduler
+                </label>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-4">
             <button

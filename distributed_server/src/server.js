@@ -209,6 +209,186 @@ app.get('/api/history', (req, res) => {
     }
 });
 
+// ==================== Datasets API ====================
+
+// Datasets state
+let dataDownloadState = {
+    status: 'idle',
+    progress: 0,
+    message: '',
+    current_symbol: '',
+    total_symbols: 0,
+    completed_symbols: 0
+};
+
+// Get all datasets
+app.get('/api/datasets', (req, res) => {
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Look for data in data_storage directory
+        const dataDir = process.env.DATA_DIR || '/data';
+        const datasets = [];
+        
+        ['stocks', 'crypto'].forEach(type => {
+            const typeDir = path.join(dataDir, 'raw', type);
+            if (fs.existsSync(typeDir)) {
+                fs.readdirSync(typeDir).forEach(file => {
+                    if (file.endsWith('.parquet') || file.endsWith('.csv')) {
+                        const stat = fs.statSync(path.join(typeDir, file));
+                        datasets.push({
+                            filename: file,
+                            type: type,
+                            size_mb: stat.size / (1024 * 1024),
+                            created_at: stat.mtime.toISOString(),
+                            path: path.join(typeDir, file)
+                        });
+                    }
+                });
+            }
+        });
+        
+        datasets.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        res.json({ success: true, datasets });
+    } catch (error) {
+        logger.error('Failed to get datasets', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Get download status
+app.get('/api/datasets/download/status', (req, res) => {
+    res.json(dataDownloadState);
+});
+
+// Start data download
+app.post('/api/datasets/download', async (req, res) => {
+    if (dataDownloadState.status === 'downloading') {
+        return res.status(400).json({ success: false, error: 'Download already in progress' });
+    }
+    
+    const { source, universe, startDate, endDate } = req.body;
+    
+    // Reset state
+    dataDownloadState = {
+        status: 'downloading',
+        progress: 0,
+        message: 'Initializing download...',
+        current_symbol: '',
+        total_symbols: 0,
+        completed_symbols: 0
+    };
+    
+    // Broadcast to dashboard
+    io.to('dashboard').emit('download:started', dataDownloadState);
+    
+    // Start download process (simplified - actual implementation would use yfinance)
+    setTimeout(() => {
+        dataDownloadState.status = 'completed';
+        dataDownloadState.progress = 100;
+        dataDownloadState.message = 'Download complete! Note: Full download requires Python backend.';
+        io.to('dashboard').emit('download:completed', dataDownloadState);
+    }, 2000);
+    
+    res.json({ success: true, message: 'Download started' });
+});
+
+// Delete dataset
+app.delete('/api/datasets/:type/:filename', (req, res) => {
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        const { type, filename } = req.params;
+        
+        const dataDir = process.env.DATA_DIR || '/data';
+        const filePath = path.join(dataDir, 'raw', type, filename);
+        
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ success: false, error: 'Dataset not found' });
+        }
+        
+        fs.unlinkSync(filePath);
+        res.json({ success: true, message: 'Dataset deleted' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==================== Models API ====================
+
+// Get all models
+app.get('/api/models', (req, res) => {
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        const modelsDir = process.env.MODELS_DIR || '/data/models';
+        const models = [];
+        
+        if (fs.existsSync(modelsDir)) {
+            fs.readdirSync(modelsDir).forEach(file => {
+                if (file.endsWith('.pt') || file.endsWith('.pth') || file.endsWith('.onnx')) {
+                    const stat = fs.statSync(path.join(modelsDir, file));
+                    models.push({
+                        filename: file,
+                        size_mb: stat.size / (1024 * 1024),
+                        created_at: stat.mtime.toISOString(),
+                        path: path.join(modelsDir, file)
+                    });
+                }
+            });
+        }
+        
+        models.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        res.json({ success: true, models });
+    } catch (error) {
+        logger.error('Failed to get models', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Download model
+app.get('/api/models/:filename/download', (req, res) => {
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        const { filename } = req.params;
+        
+        const modelsDir = process.env.MODELS_DIR || '/data/models';
+        const filePath = path.join(modelsDir, filename);
+        
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ success: false, error: 'Model not found' });
+        }
+        
+        res.download(filePath, filename);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Delete model
+app.delete('/api/models/:filename', (req, res) => {
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        const { filename } = req.params;
+        
+        const modelsDir = process.env.MODELS_DIR || '/data/models';
+        const filePath = path.join(modelsDir, filename);
+        
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ success: false, error: 'Model not found' });
+        }
+        
+        fs.unlinkSync(filePath);
+        res.json({ success: true, message: 'Model deleted' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // ==================== MongoDB Connection ====================
 const connectDB = async () => {
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/distributed_training';

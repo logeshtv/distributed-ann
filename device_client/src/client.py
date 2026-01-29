@@ -42,10 +42,14 @@ class DeviceInfo:
     platform: str
     totalRam: int  # MB - Total system RAM
     availableRam: int  # MB - Currently available RAM
-    cpuCores: int  # Available CPU cores
+    cpuCores: int  # Total CPU cores
+    availableCores: int  # Available CPU cores (based on usage)
     cpuUsage: float  # Current CPU usage percentage
     gpuAvailable: bool = False
-    gpuMemory: int = 0  # Available GPU memory in MB
+    gpuName: str = ""
+    gpuMemoryTotal: int = 0  # Total GPU memory in MB
+    gpuMemoryAvailable: int = 0  # Available GPU memory in MB
+    gpuUtilization: float = 0.0  # GPU utilization percentage
     batteryLevel: int = 100
     isCharging: bool = True
     framework: str = 'pytorch'
@@ -86,29 +90,55 @@ class ResourceMonitor:
             device_type = 'unknown'
             platform_name = system
         
-        # Memory info
+        # Memory info - AVAILABLE is what matters for training
         mem = psutil.virtual_memory()
         total_ram = mem.total // (1024 * 1024)  # Convert to MB
-        available_ram = mem.available // (1024 * 1024)
+        available_ram = mem.available // (1024 * 1024)  # Actually available RAM
         
-        # CPU info
+        # CPU info - Calculate available cores based on usage
         cpu_cores = psutil.cpu_count()
         cpu_usage = psutil.cpu_percent(interval=0.1)
+        # Available cores = total cores * (1 - usage%)
+        available_cores = max(1, int(cpu_cores * (1 - cpu_usage / 100)))
         
         # Battery info
         battery = psutil.sensors_battery()
         battery_level = int(battery.percent) if battery else 100
         is_charging = battery.power_plugged if battery else True
         
-        # GPU info
+        # GPU info - Get AVAILABLE memory, not just total
         gpu_available = False
-        gpu_memory = 0
+        gpu_name = ""
+        gpu_memory_total = 0
+        gpu_memory_available = 0
+        gpu_utilization = 0.0
+        
         if PYTORCH_AVAILABLE and torch.cuda.is_available():
             gpu_available = True
-            gpu_memory = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_memory_total = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
+            
+            # Get actual available GPU memory
+            gpu_memory_reserved = torch.cuda.memory_reserved(0) // (1024 * 1024)
+            gpu_memory_allocated = torch.cuda.memory_allocated(0) // (1024 * 1024)
+            gpu_memory_available = gpu_memory_total - gpu_memory_reserved
+            
+            # Try to get GPU utilization via nvidia-smi
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    gpu_utilization = float(result.stdout.strip().split('\n')[0])
+            except:
+                pass
         
-        # Calculate max batch size based on available RAM
-        max_batch_size = ResourceMonitor.calculate_batch_size(available_ram)
+        # Calculate max batch size based on AVAILABLE resources
+        max_batch_size = ResourceMonitor.calculate_optimal_batch_size(
+            available_ram, gpu_memory_available, gpu_available
+        )
         
         return DeviceInfo(
             name=device_name or f"{platform_name}-{socket.gethostname()[:8]}",
@@ -117,9 +147,13 @@ class ResourceMonitor:
             totalRam=total_ram,
             availableRam=available_ram,
             cpuCores=cpu_cores,
+            availableCores=available_cores,
             cpuUsage=cpu_usage,
             gpuAvailable=gpu_available,
-            gpuMemory=gpu_memory,
+            gpuName=gpu_name,
+            gpuMemoryTotal=gpu_memory_total,
+            gpuMemoryAvailable=gpu_memory_available,
+            gpuUtilization=gpu_utilization,
             batteryLevel=battery_level,
             isCharging=is_charging,
             framework='pytorch' if PYTORCH_AVAILABLE else 'simulation',
@@ -127,30 +161,89 @@ class ResourceMonitor:
         )
     
     @staticmethod
-    def calculate_batch_size(available_ram_mb: int) -> int:
-        """Calculate optimal batch size based on available RAM"""
-        if available_ram_mb < 500:
-            return 4
-        elif available_ram_mb < 1000:
-            return 8
-        elif available_ram_mb < 2000:
-            return 16
-        elif available_ram_mb < 4000:
-            return 32
-        elif available_ram_mb < 8000:
-            return 64
-        else:
+    def calculate_optimal_batch_size(available_ram_mb: int, gpu_mem_mb: int = 0, use_gpu: bool = False) -> int:
+        """Calculate optimal batch size based on AVAILABLE resources"""
+        
+        # If GPU available, use GPU memory for batch size calculation
+        if use_gpu and gpu_mem_mb > 0:
+            # GPU batch sizes - can be much larger
+            if gpu_mem_mb >= 15000:  # 15GB+ (T4 x2, A100, etc.)
+                return 512
+            elif gpu_mem_mb >= 8000:  # 8GB+ (RTX 3070, T4)
+                return 256
+            elif gpu_mem_mb >= 4000:  # 4GB+
+                return 128
+            elif gpu_mem_mb >= 2000:  # 2GB+
+                return 64
+            else:
+                return 32
+        
+        # CPU/RAM-based batch sizes
+        if available_ram_mb >= 16000:  # 16GB+ available
+            return 256
+        elif available_ram_mb >= 8000:  # 8GB+
             return 128
+        elif available_ram_mb >= 4000:  # 4GB+
+            return 64
+        elif available_ram_mb >= 2000:  # 2GB+
+            return 32
+        elif available_ram_mb >= 1000:  # 1GB+
+            return 16
+        else:
+            return 8
+    
+    @staticmethod
+    def calculate_batch_size(available_ram_mb: int) -> int:
+        """Calculate optimal batch size based on available RAM (legacy)"""
+        return ResourceMonitor.calculate_optimal_batch_size(available_ram_mb)
     
     @staticmethod
     def get_heartbeat_data() -> Dict[str, Any]:
         """Get current resource status for heartbeat"""
         mem = psutil.virtual_memory()
         battery = psutil.sensors_battery()
+        cpu_usage = psutil.cpu_percent()
+        
+        # Get available resources
+        available_ram = mem.available // (1024 * 1024)
+        total_ram = mem.total // (1024 * 1024)
+        cpu_cores = psutil.cpu_count()
+        available_cores = max(1, int(cpu_cores * (1 - cpu_usage / 100)))
+        
+        # GPU info
+        gpu_available = False
+        gpu_memory_available = 0
+        gpu_memory_total = 0
+        gpu_utilization = 0.0
+        
+        if PYTORCH_AVAILABLE and torch.cuda.is_available():
+            gpu_available = True
+            gpu_memory_total = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
+            gpu_memory_reserved = torch.cuda.memory_reserved(0) // (1024 * 1024)
+            gpu_memory_available = gpu_memory_total - gpu_memory_reserved
+            
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ['nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    gpu_utilization = float(result.stdout.strip().split('\n')[0])
+            except:
+                pass
         
         return {
-            'availableRam': mem.available // (1024 * 1024),
-            'cpuUsage': psutil.cpu_percent(),
+            'totalRam': total_ram,
+            'availableRam': available_ram,
+            'ramUsagePercent': round((1 - mem.available / mem.total) * 100, 1),
+            'cpuCores': cpu_cores,
+            'availableCores': available_cores,
+            'cpuUsage': cpu_usage,
+            'gpuAvailable': gpu_available,
+            'gpuMemoryTotal': gpu_memory_total,
+            'gpuMemoryAvailable': gpu_memory_available,
+            'gpuUtilization': gpu_utilization,
             'batteryLevel': int(battery.percent) if battery else 100,
             'isCharging': battery.power_plugged if battery else True
         }
