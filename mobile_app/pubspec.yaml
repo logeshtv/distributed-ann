@@ -1,0 +1,47 @@
+name: neurofleet_mobile
+description: Mobile client for distributed neural network training
+
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0
+  flutter_animate: ^4.3.0
+  
+  # Networking
+  socket_io_client: ^2.0.3+1
+  http: ^1.1.2
+  
+  # State Management
+  provider: ^6.1.1
+  
+  # System
+  device_info_plus: ^9.1.1
+  battery_plus: ^5.0.2
+  system_info2: ^3.0.2
+  
+  # Storage
+  shared_preferences: ^2.2.2
+  
+  # ML (TensorFlow Lite)
+  tflite_flutter: ^0.10.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/models/
+    - assets/images/

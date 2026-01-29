@@ -1,0 +1,17 @@
+# Distributed Training Device Client
+# Python client for participating in federated learning
+
+# Core dependencies
+python-socketio[asyncio_client]>=5.10.0
+aiohttp>=3.9.0
+websockets>=12.0
+
+# System monitoring
+psutil>=5.9.0
+
+# Machine Learning (optional - for actual training)
+torch>=2.0.0
+numpy>=1.24.0
+
+# Utilities
+python-dotenv>=1.0.0
