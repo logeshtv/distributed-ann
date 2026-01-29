@@ -40,12 +40,12 @@ class DeviceInfo:
     name: str
     type: str  # 'desktop', 'laptop', 'mobile', 'server'
     platform: str
-    totalRam: int  # MB
-    availableRam: int  # MB
-    cpuCores: int
-    cpuUsage: float
+    totalRam: int  # MB - Total system RAM
+    availableRam: int  # MB - Currently available RAM
+    cpuCores: int  # Available CPU cores
+    cpuUsage: float  # Current CPU usage percentage
     gpuAvailable: bool = False
-    gpuMemory: int = 0
+    gpuMemory: int = 0  # Available GPU memory in MB
     batteryLevel: int = 100
     isCharging: bool = True
     framework: str = 'pytorch'
@@ -387,6 +387,9 @@ class DistributedClient:
                 self.device_id = data.get('deviceId')
                 logger.info(f"Device registered with ID: {self.device_id}")
                 logger.info(f"Assigned batch size: {data.get('assignedBatchSize')}")
+                # ✅ Immediately mark as ready for training
+                await self.sio.emit('training:ready', {})
+                logger.info("Marked as ready for training")
             else:
                 logger.error("Device registration failed")
         
@@ -401,7 +404,14 @@ class DistributedClient:
         
         @self.sio.on('training:start')
         async def on_training_start(data):
-            logger.info(f"Training started - Job: {data.get('jobId')}, Round: {data.get('round')}")
+            logger.info("=" * 60)
+            logger.info(f"🚀 TRAINING STARTED")
+            logger.info(f"   Job ID: {data.get('jobId')}")
+            logger.info(f"   Round: {data.get('round')}")
+            logger.info(f"   Batch Size: {data.get('batchSize')}")
+            logger.info(f"   Epochs: {data.get('epochs')}")
+            logger.info(f"   Learning Rate: {data.get('learningRate')}")
+            logger.info("=" * 60)
             
             config = TrainingConfig(
                 job_id=data.get('jobId'),
@@ -435,7 +445,15 @@ class DistributedClient:
         while self.sio.connected:
             heartbeat_data = self.resource_monitor.get_heartbeat_data()
             await self.sio.emit('device:heartbeat', heartbeat_data)
-            await asyncio.sleep(30)  # Send every 30 seconds
+            
+            # Log current resources for visibility
+            logger.info(
+                f"📊 Resources - RAM: {heartbeat_data['availableRam']}MB available | "
+                f"CPU: {heartbeat_data['cpuUsage']:.1f}% | "
+                f"Battery: {heartbeat_data['batteryLevel']}% | "
+                f"Training: {'Yes' if self.is_training else 'No'}"
+            )
+            await asyncio.sleep(10)  # Send every 10 seconds for better updates
     
     async def _run_training(self, config: TrainingConfig):
         """Execute local training"""

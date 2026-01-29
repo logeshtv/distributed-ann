@@ -313,29 +313,45 @@ export class SocketHandler {
         const devices = this.deviceRegistry.getDevicesByStatus('ready');
         const round = this.weightAggregator.getCurrentRound() + 1;
 
-        this.logger.info(`Distributing training batches for round ${round} to ${devices.length} devices`);
+        this.logger.info(`========================================`);
+        this.logger.info(`🚀 Distributing training for Round ${round}`);
+        this.logger.info(`   Devices: ${devices.length}`);
+        this.logger.info(`   Job: ${job.name}`);
+        this.logger.info(`========================================`);
+
+        if (devices.length === 0) {
+            this.logger.warn('No ready devices to distribute training to');
+            return;
+        }
 
         devices.forEach((device, index) => {
             this.deviceRegistry.updateDevice(device.id, { status: 'training' });
 
-            this.io.to(device.socketId).emit('training:start', {
+            const trainingData = {
                 jobId: job.id,
                 round,
-                batchSize: device.capabilities.maxBatchSize,
-                epochs: job.trainingConfig?.localEpochs || 1,
+                batchSize: device.capabilities?.maxBatchSize || job.trainingConfig?.batchSize || 32,
+                epochs: job.trainingConfig?.localEpochs || 3,
                 learningRate: job.trainingConfig?.learningRate || 0.001,
                 modelConfig: job.modelConfig,
                 dataPartition: {
-                    start: index * job.samplesPerDevice,
-                    end: (index + 1) * job.samplesPerDevice
+                    start: index * (job.samplesPerDevice || 1000),
+                    end: (index + 1) * (job.samplesPerDevice || 1000)
                 }
-            });
+            };
+
+            this.logger.info(`📤 Sending training:start to ${device.name}`);
+            this.io.to(device.socketId).emit('training:start', trainingData);
         });
+
+        // Update job current round
+        this.jobScheduler.updateJobMetrics(job.id, { round, devicesParticipated: devices.length });
 
         // Broadcast to dashboard
         this.io.to('dashboard').emit('training:round_started', {
             round,
-            devices: devices.length
+            devices: devices.length,
+            jobId: job.id
         });
     }
 
@@ -412,7 +428,27 @@ export class SocketHandler {
 
     broadcastJobStart(jobId) {
         const job = this.jobScheduler.getJob(jobId);
+        this.logger.info(`Broadcasting job start: ${job.name}`);
         this.io.to('dashboard').emit('job:started', { job });
+        
+        // ✅ Immediately start training if devices are ready
+        const readyDevices = this.deviceRegistry.getDevicesByStatus('ready');
+        const idleDevices = this.deviceRegistry.getDevicesByStatus('idle');
+        const allAvailableDevices = [...readyDevices, ...idleDevices];
+        
+        this.logger.info(`Available devices: ${allAvailableDevices.length} (ready: ${readyDevices.length}, idle: ${idleDevices.length})`);
+        
+        if (allAvailableDevices.length >= (job.minDevices || 1)) {
+            // Mark all available devices as ready first
+            allAvailableDevices.forEach(device => {
+                this.deviceRegistry.updateDevice(device.id, { status: 'ready' });
+            });
+            
+            this.logger.info(`Starting training distribution immediately with ${allAvailableDevices.length} devices`);
+            this.distributeTrainingBatches(job);
+        } else {
+            this.logger.info(`Waiting for more devices. Have: ${allAvailableDevices.length}, Need: ${job.minDevices || 1}`);
+        }
     }
 
     broadcastJobStop(jobId) {
