@@ -3,6 +3,14 @@ FROM node:18-alpine as build
 
 WORKDIR /app
 
+# Accept build arguments
+ARG VITE_SOCKET_URL=http://localhost:3001
+ARG VITE_SERVER_URL=http://localhost:3001
+
+# Set environment variables for Vite
+ENV VITE_SOCKET_URL=$VITE_SOCKET_URL
+ENV VITE_SERVER_URL=$VITE_SERVER_URL
+
 # Install dependencies
 COPY package*.json ./
 RUN npm ci
