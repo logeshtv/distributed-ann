@@ -13,6 +13,8 @@ import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
 
 import { SocketHandler } from './socket/socketHandler.js';
 import { DeviceRegistry } from './services/deviceRegistry.js';
@@ -224,9 +226,6 @@ let dataDownloadState = {
 // Get all datasets
 app.get('/api/datasets', (req, res) => {
     try {
-        const fs = require('fs');
-        const path = require('path');
-        
         // Look for data in data_storage directory
         const dataDir = process.env.DATA_DIR || '/data';
         const datasets = [];
@@ -297,8 +296,6 @@ app.post('/api/datasets/download', async (req, res) => {
 // Delete dataset
 app.delete('/api/datasets/:type/:filename', (req, res) => {
     try {
-        const fs = require('fs');
-        const path = require('path');
         const { type, filename } = req.params;
         
         const dataDir = process.env.DATA_DIR || '/data';
@@ -320,9 +317,6 @@ app.delete('/api/datasets/:type/:filename', (req, res) => {
 // Get all models
 app.get('/api/models', (req, res) => {
     try {
-        const fs = require('fs');
-        const path = require('path');
-        
         const modelsDir = process.env.MODELS_DIR || '/data/models';
         const models = [];
         
@@ -351,8 +345,6 @@ app.get('/api/models', (req, res) => {
 // Download model
 app.get('/api/models/:filename/download', (req, res) => {
     try {
-        const fs = require('fs');
-        const path = require('path');
         const { filename } = req.params;
         
         const modelsDir = process.env.MODELS_DIR || '/data/models';
