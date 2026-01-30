@@ -14,7 +14,14 @@ RUN pip3 install --break-system-packages --no-cache-dir \
     yfinance \
     pandas \
     pyarrow \
-    requests
+    requests \
+    loguru \
+    python-dotenv \
+    tqdm \
+    alpaca-py \
+    python-binance \
+    ccxt \
+    ta
 
 # Copy source code
 COPY src/ ./src/
