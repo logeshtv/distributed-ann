@@ -2,8 +2,11 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install Python and pip
-RUN apk add --no-cache python3 py3-pip
+# Install Python, pip, and timezone data
+RUN apk add --no-cache python3 py3-pip tzdata
+
+# Set timezone
+ENV TZ=America/New_York
 
 # Install dependencies
 COPY package*.json ./
