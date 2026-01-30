@@ -47,6 +47,9 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3001"
+    volumes:
+      - ./training_backend:/app/training_backend:ro
+      - ./data_storage:/data
     environment:
       - NODE_ENV=production
       - PORT=3001
@@ -56,6 +59,9 @@ services:
       - MAX_DEVICES=100
       - HEARTBEAT_INTERVAL=30000
       - AGGREGATION_METHOD=fedavg
+      - PYTHON_CMD=python3
+      - PYTHON_DOWNLOAD_SCRIPT=/app/training_backend/scripts/api_download.py
+      - DATA_DIR=/data
     depends_on:
       mongodb:
         condition: service_healthy

@@ -2,9 +2,19 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# Install Python and pip
+RUN apk add --no-cache python3 py3-pip
+
 # Install dependencies
 COPY package*.json ./
 RUN npm ci --only=production
+
+# Install Python packages needed for data download
+RUN pip3 install --no-cache-dir \
+    yfinance \
+    pandas \
+    pyarrow \
+    requests
 
 # Copy source code
 COPY src/ ./src/

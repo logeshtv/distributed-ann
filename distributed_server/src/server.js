@@ -15,6 +15,7 @@ import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
 
 import { SocketHandler } from './socket/socketHandler.js';
 import { DeviceRegistry } from './services/deviceRegistry.js';
@@ -273,7 +274,7 @@ app.post('/api/datasets/download', async (req, res) => {
     dataDownloadState = {
         status: 'downloading',
         progress: 0,
-        message: 'Initializing download...',
+        message: 'Starting Python download script...',
         current_symbol: '',
         total_symbols: 0,
         completed_symbols: 0
@@ -281,16 +282,79 @@ app.post('/api/datasets/download', async (req, res) => {
     
     // Broadcast to dashboard
     io.to('dashboard').emit('download:started', dataDownloadState);
-    
-    // Start download process (simplified - actual implementation would use yfinance)
-    setTimeout(() => {
-        dataDownloadState.status = 'completed';
-        dataDownloadState.progress = 100;
-        dataDownloadState.message = 'Download complete! Note: Full download requires Python backend.';
-        io.to('dashboard').emit('download:completed', dataDownloadState);
-    }, 2000);
-    
     res.json({ success: true, message: 'Download started' });
+    
+    // Call Python script to perform actual download
+    const pythonScript = process.env.PYTHON_DOWNLOAD_SCRIPT || '/app/training_backend/scripts/api_download.py';
+    const pythonCmd = process.env.PYTHON_CMD || 'python3';
+    
+    const pythonProcess = spawn(pythonCmd, [
+        pythonScript,
+        '--source', source,
+        '--universe', universe,
+        '--start-date', startDate,
+        '--end-date', endDate
+    ]);
+    
+    let outputData = '';
+    let errorData = '';
+    
+    pythonProcess.stdout.on('data', (data) => {
+        const output = data.toString();
+        outputData += output;
+        
+        // Update progress messages
+        if (output.includes('Downloading')) {
+            dataDownloadState.message = output.trim();
+            dataDownloadState.progress = 25;
+            io.to('dashboard').emit('download:progress', dataDownloadState);
+        } else if (output.includes('Fetched')) {
+            dataDownloadState.message = output.trim();
+            dataDownloadState.progress = 50;
+            io.to('dashboard').emit('download:progress', dataDownloadState);
+        } else if (output.includes('Saved')) {
+            dataDownloadState.message = output.trim();
+            dataDownloadState.progress = 90;
+            io.to('dashboard').emit('download:progress', dataDownloadState);
+        }
+    });
+    
+    pythonProcess.stderr.on('data', (data) => {
+        errorData += data.toString();
+        logger.error('Python download error:', data.toString());
+    });
+    
+    pythonProcess.on('close', (code) => {
+        if (code === 0) {
+            try {
+                // Parse JSON output from Python script
+                const jsonStart = outputData.lastIndexOf('{');
+                if (jsonStart !== -1) {
+                    const result = JSON.parse(outputData.substring(jsonStart));
+                    if (result.success) {
+                        dataDownloadState.status = 'completed';
+                        dataDownloadState.progress = 100;
+                        dataDownloadState.message = `Download complete! ${result.results.map(r => `${r.type}: ${r.rows} rows`).join(', ')}`;
+                    } else {
+                        dataDownloadState.status = 'failed';
+                        dataDownloadState.message = `Download failed: ${result.error}`;
+                    }
+                } else {
+                    dataDownloadState.status = 'completed';
+                    dataDownloadState.progress = 100;
+                    dataDownloadState.message = 'Download complete!';
+                }
+            } catch (e) {
+                dataDownloadState.status = 'completed';
+                dataDownloadState.progress = 100;
+                dataDownloadState.message = 'Download complete!';
+            }
+        } else {
+            dataDownloadState.status = 'failed';
+            dataDownloadState.message = `Download failed with code ${code}: ${errorData}`;
+        }
+        io.to('dashboard').emit('download:completed', dataDownloadState);
+    });
 });
 
 // Delete dataset
