@@ -74,10 +74,7 @@ services:
   dashboard:
     build:
       context: ./web_dashboard
-      dockerfile: Dockerfile
-      args:
-        - VITE_SOCKET_URL=http://172.188.217.87:3001
-        - VITE_API_URL=http://172.188.217.87:3001/api
+      dockerfile: Dockerfile.prod
     container_name: distributed-dashboard
     restart: unless-stopped
     ports:
