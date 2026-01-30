@@ -10,18 +10,10 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Install Python packages needed for data download
-RUN pip3 install --break-system-packages --no-cache-dir \
-    yfinance \
-    pandas \
-    pyarrow \
-    requests \
-    loguru \
-    python-dotenv \
-    tqdm \
-    alpaca-py \
-    python-binance \
-    ccxt \
-    ta
+# Install in stages to avoid memory issues
+RUN pip3 install --break-system-packages --no-cache-dir numpy pandas && \
+    pip3 install --break-system-packages --no-cache-dir yfinance pyarrow && \
+    pip3 install --break-system-packages --no-cache-dir requests loguru python-dotenv tqdm
 
 # Copy source code
 COPY src/ ./src/
